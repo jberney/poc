@@ -9,7 +9,7 @@ module.exports = merge(common, {
   module: {
     rules: [{ test: /\.css$/, use: [MiniCssExtractPlugin.loader, 'css-loader'] }],
   },
-  output: { filename: '[name].[contenthash].js' },
+  output: { filename: '[name].[contenthash].js', publicPath: '/poc' },
   plugins: [
     new MiniCssExtractPlugin({ filename: '[name].[contenthash].css' }),
     new webpack.ids.HashedModuleIdsPlugin(),

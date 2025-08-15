@@ -49,7 +49,7 @@ export function Siteframe() {
           value={[value]}
         >
           <Slider.Label />
-          <Slider.ValueText />
+          <Slider.ValueText userSelect="none" />
           <Slider.Control>
             <Slider.Track>
               <Slider.Range />

@@ -1,66 +1,69 @@
-import { Center, Slider, VStack } from '@chakra-ui/react';
-import { keys, map } from 'lodash-es';
-import React, { useEffect, useState } from 'react';
+import { Center, Flex, Slider } from '@chakra-ui/react';
+import { first } from 'lodash-es';
+import React, { useEffect, useRef } from 'react';
 import { supabase } from '../../../supabase/supabaseClient';
 
-const userId = Math.random().toString(36).slice(2, 10);
-
-export function PlayerSlider({ label, ...props }) {
-  return (
-    <Slider.Root max={10} min={0} size="lg" w="full" {...props}>
-      <Slider.Label children={label} fontWeight={props?.disabled ? 400 : 600} />
-      <Slider.ValueText userSelect="none" />
-      <Slider.Control>
-        <Slider.Track>
-          <Slider.Range />
-        </Slider.Track>
-        <Slider.Thumb>
-          <Slider.DraggingIndicator />
-          <Slider.HiddenInput />
-        </Slider.Thumb>
-      </Slider.Control>
-    </Slider.Root>
-  );
-}
-
 export function Siteframe() {
-  const [channel] = useState(supabase.channel('channel', { config: { presence: { key: userId } } }));
-  const [userIds, setUserIds] = useState(keys(channel.presenceState()));
-  const [values, setValues] = useState({});
-
+  const [value, setValue] = React.useState(0);
   useEffect(() => {
-    channel
-      .on('presence', { event: 'sync' }, () => setUserIds(keys(channel.presenceState())))
-      .on('broadcast', { event: 'setValue' }, ({ payload }) =>
-        setValues(prev => ({
-          ...prev,
-          [payload.userId]: payload.value,
-        }))
-      )
-      .subscribe(async status => status === 'SUBSCRIBED' && channel.track({ value: [4] }));
-    return () => channel.untrack();
+    const fetchValue = async () => {
+      const { data } = await supabase.from('progress').select('value').eq('id', 1).single();
+      if (data && !isDragging.current) setValue(data.value);
+    };
+    fetchValue();
+    const handleVisibility = () => document.hidden || fetchValue();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
-
+  useEffect(() => {
+    const channel = supabase
+      .channel('progress-changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'progress', filter: 'id=eq.1' },
+        payload => isDragging.current || setValue(payload.new.value)
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
+  const isDragging = useRef(false);
   return (
     <Center p={4}>
-      <VStack maxW="20rem" w="full" spacing={6}>
-        <strong>Your user id:{userId}</strong>
-        {map(userIds, id => (
-          <PlayerSlider
-            key={id}
-            label={id}
-            disabled={id !== userId}
-            onValueChange={async e => {
-              await channel.send({
-                event: 'setValue',
-                payload: { userId, value: e.value },
-                type: 'broadcast',
-              });
-            }}
-            value={values[id] || 0}
-          />
-        ))}
-      </VStack>
+      <Flex alignItems="center" maxW="20rem" w="full">
+        <Slider.Root
+          flex={1}
+          max={10}
+          min={0}
+          onValueChange={e => {
+            isDragging.current = true;
+            const value = Number(first(e.value));
+            setValue(value);
+            supabase
+              .from('progress')
+              .update({ value })
+              .eq('id', 1)
+              .then(() => {});
+          }}
+          onValueChangeEnd={() => (isDragging.current = false)}
+          size="lg"
+          value={[value]}
+        >
+          <Slider.Label />
+          <Slider.ValueText userSelect="none" />
+          <Slider.Control>
+            <Slider.Track>
+              <Slider.Range />
+            </Slider.Track>
+            <Slider.Thumb>
+              <Slider.DraggingIndicator />
+              <Slider.HiddenInput />
+            </Slider.Thumb>
+            <Slider.MarkerGroup>
+              <Slider.Marker />
+            </Slider.MarkerGroup>
+          </Slider.Control>
+        </Slider.Root>
+      </Flex>
     </Center>
   );
 }
